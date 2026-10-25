@@ -1,4 +1,7 @@
+// ข้อมูลตั้งต้น: บัญชี Admin (จาก env) + ลูกค้าทดสอบ + สินค้าตัวอย่าง
+// รัน: npm run db:seed  (รันซ้ำได้ ไม่สร้างข้อมูลซ้ำ)
 require('dotenv').config({ quiet: true });
+const bcrypt = require('bcryptjs');
 const prisma = require('../src/lib/prisma');
 
 const PRODUCTS = [
@@ -34,12 +37,29 @@ const PRODUCTS = [
   },
 ];
 
+async function upsertUser(email, password, name, role) {
+  const passwordHash = await bcrypt.hash(password, 10);
+  return prisma.user.upsert({ where: { email }, update: {}, create: { email, passwordHash, name, role } });
+}
+
 async function main() {
+  const adminEmail = (process.env.ADMIN_EMAIL || 'admin@shop.local').toLowerCase();
+  const adminPassword = process.env.ADMIN_PASSWORD;
+  if (!adminPassword || adminPassword.length < 8) {
+    throw new Error('Set ADMIN_PASSWORD (>= 8 chars) in .env before seeding');
+  }
+  await upsertUser(adminEmail, adminPassword, 'Shop Admin', 'ADMIN');
+  // บัญชีทดสอบรหัสผ่านสาธารณะ — สร้างเฉพาะตอนพัฒนา ห้ามมีบน Production
+  if (process.env.NODE_ENV !== 'production') {
+    await upsertUser('customer@shop.local', 'customer1234', 'Demo Customer', 'CUSTOMER');
+  }
+
   for (const p of PRODUCTS) {
     const exists = await prisma.product.findFirst({ where: { name: p.name } });
     if (!exists) await prisma.product.create({ data: p });
   }
-  console.log(`Seeded: products=${PRODUCTS.length}`);
+  const customer = process.env.NODE_ENV !== 'production' ? 'customer@shop.local' : '(ไม่สร้างบน production)';
+  console.log(`Seeded: admin=${adminEmail}, customer=${customer}, products=${PRODUCTS.length}`);
 }
 
 main()

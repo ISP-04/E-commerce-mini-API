@@ -6,11 +6,14 @@ const morgan = require('morgan');
 const env = require('./config/env');
 const prisma = require('./lib/prisma');
 const apiRoutes = require('./routes');
+const { globalLimiter } = require('./middlewares/rateLimit');
 const { errorHandler, notFoundHandler } = require('./middlewares/errorHandler');
  
 function createApp() {
   const app = express();
   app.disable('x-powered-by'); // ไม่บอกผู้โจมตีว่าใช้ Express
+  // ใช้ X-Forwarded-For เฉพาะเมื่อมี Reverse proxy จริงเท่านั้น (TRUST_PROXY_HOPS) — ป้องกันการปลอม IP หลบ Rate limit
+  app.set('trust proxy', env.trustProxyHops);
  
   app.use(helmet()); // ใส่ Security Headers มาตรฐาน
   app.use(cors({ origin: env.corsOrigin === '*' ? '*' : env.corsOrigin.split(',') }));
@@ -34,7 +37,7 @@ function createApp() {
   });
  
   // Versioning: ใส่ /api/v1 ไว้หน้า URL เพื่อให้ออก v2 ได้ในอนาคตโดยไม่กระทบ Client เดิม
-  app.use('/api/v1', apiRoutes);
+  app.use('/api/v1', globalLimiter, apiRoutes);
  
   app.use(notFoundHandler); // ไม่ตรงกับ Route ไหนเลย -> 404
   app.use(errorHandler); // ต้องอยู่ล่างสุดเสมอ
