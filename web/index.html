@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mini Shop</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
+▸ web/public/favicon.svg
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect width="32" height="32" rx="7" fill="#0f766e"/><path d="M9 12h14l-1.5 11h-11z" fill="#fff"/><path d="M12.5 12a3.5 3.5 0 0 1 7 0" stroke="#fff" stroke-width="2" fill="none"/></svg>
+▸ web/vite.config.js
+import react from '@vitejs/plugin-react';
+import { defineConfig } from 'vite';
+ 
+// ตอนพัฒนา Vite (พอร์ต 5173) ส่งต่อ /api, /health และ /ws ไปที่ API (พอร์ต 8080)
+// เบราว์เซอร์จึงเห็นทุกอย่างเป็น Origin เดียวกัน ไม่ต้องพึ่ง CORS และโค้ดใช้ URL แบบ Relative ได้ทั้ง Dev และ Production
+const API_TARGET = process.env.VITE_API_TARGET || 'http://localhost:8080';
+ 
+export default defineConfig({
+  plugins: [react()],
+  server: {
+    port: 5173,
+    proxy: {
+      '/api': API_TARGET,
+      '/health': API_TARGET,
+      '/ws': { target: API_TARGET, ws: true },
+    },
+  },
+  test: {
+    environment: 'jsdom',
+    setupFiles: './src/test/setup.js',
+  },
+});

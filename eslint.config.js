@@ -3,7 +3,7 @@ const globals = require('globals');
 const prettier = require('eslint-config-prettier');
 
 module.exports = [
-  { ignores: ['node_modules/', 'coverage/'] },
+  { ignores: ['node_modules/', 'coverage/', 'public/', 'web/'] }, // web/ ใช้ oxlint ของตัวเอง
   js.configs.recommended,
   {
     files: ['**/*.js'],
