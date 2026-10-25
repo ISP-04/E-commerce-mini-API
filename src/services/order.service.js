@@ -6,17 +6,19 @@
 //   3) CHECK (stock >= 0) ในฐานข้อมูล เป็นด่านสุดท้ายถ้าโค้ดมีบั๊ก
 const crypto = require('node:crypto');
 const prisma = require('../lib/prisma');
+const env = require('../config/env');
 const AppError = require('../utils/AppError');
 const { calculateOrderTotals } = require('../utils/money');
 const { STATUS, canAdminTransition, canCustomerCancel, canPay, holdsStock } = require('../utils/orderStatus');
-const serialize = require('./serializers');
+const { emitDomainEvent, EVENTS } = require('../lib/events');
 const productService = require('./product.service');
-
+const serialize = require('./serializers');
+ 
 const TX_OPTIONS = { maxWait: 5000, timeout: 10000 };
 const ORDER_INCLUDE = { items: true, payments: { orderBy: { createdAt: 'asc' } } };
  
 async function createOrder(user, { shippingAddress }) {
-  const order = await prisma.$transaction(async (tx) => {
+  const { order, lowStock } = await prisma.$transaction(async (tx) => {
     // ล็อกตะกร้าของ user ก่อน: กันการกด "สั่งซื้อ" ซ้ำ 2 ครั้งพร้อมกันแล้วได้ 2 Order จากตะกร้าเดียว
     const [cartRow] = await tx.$queryRaw`SELECT id FROM carts WHERE user_id = ${user.id}::uuid FOR UPDATE`;
     if (!cartRow) throw AppError.badRequest('Cart is empty');
@@ -56,9 +58,13 @@ async function createOrder(user, { shippingAddress }) {
       items.map((i) => ({ productId: i.productId, unitPrice: byId.get(i.productId).price, quantity: i.quantity })),
     );
  
-    // ตัดสต็อกตามลำดับ id เดียวกับตอนล็อก
+    const low = [];
     for (const item of [...items].sort((a, b) => a.productId.localeCompare(b.productId))) {
+      const remaining = byId.get(item.productId).stock - item.quantity;
       await tx.product.update({ where: { id: item.productId }, data: { stock: { decrement: item.quantity } } });
+      if (remaining <= env.lowStockThreshold) {
+        low.push({ productId: item.productId, name: byId.get(item.productId).name, remaining });
+      }
     }
  
     const created = await tx.order.create({
@@ -80,15 +86,23 @@ async function createOrder(user, { shippingAddress }) {
     });
  
     await tx.cartItem.deleteMany({ where: { cartId: cartRow.id } });
-    return created;
+    return { order: created, lowStock: low };
   }, TX_OPTIONS);
  
-  // หลัง Commit แล้วเท่านั้น จึงล้าง Cache ของสินค้าที่สต็อกเปลี่ยน
+  // หลัง Commit แล้วเท่านั้น จึงล้าง Cache และปล่อย Event (ไม่ส่งอีเมลยืนยันของ Order ที่ Rollback ไปแล้ว)
   await productService.invalidate(...order.items.map((i) => i.productId));
-  return serialize.order(order);
+  const result = serialize.order(order);
+  emitDomainEvent(EVENTS.ORDER_CREATED, {
+    orderId: result.id,
+    userId: user.id,
+    email: user.email,
+    totalAmount: result.totalAmount,
+    itemCount: result.items.length,
+  });
+  for (const item of lowStock) emitDomainEvent(EVENTS.LOW_STOCK, item);
+  return result;
 }
-
-
+ 
 async function findOrderFor(user, orderId) {
   const where = user.role === 'ADMIN' ? { id: orderId } : { id: orderId, userId: user.id };
   const order = await prisma.order.findFirst({ where, include: ORDER_INCLUDE });
@@ -116,7 +130,7 @@ async function listOrders(user, { page, limit, status }) {
   ]);
   return { data: rows.map(serialize.order), pagination: { page, limit, total, totalPages: Math.ceil(total / limit) } };
 }
-
+ 
 /**
  * เปลี่ยนสถานะแบบ Atomic: UPDATE ... WHERE status = <สถานะเดิม>
  * ถ้ามี Request อื่นเปลี่ยนไปก่อน (เช่น จ่ายเงินพร้อมกับยกเลิก) จะได้ count = 0 -> 409
@@ -139,9 +153,16 @@ async function transition(order, to, { restock = false, extraData = {}, onCommit
     if (onCommitTx) await onCommitTx(tx);
     return tx.order.findUnique({ where: { id: order.id }, include: ORDER_INCLUDE });
   }, TX_OPTIONS);
-    
+ 
   if (restock) await productService.invalidate(...order.items.map((i) => i.productId));
-  return serialize.order(updated);
+  const result = serialize.order(updated);
+  emitDomainEvent(EVENTS.ORDER_STATUS_CHANGED, {
+    orderId: result.id,
+    userId: result.userId,
+    from: order.status,
+    to,
+  });
+  return result;
 }
  
 async function payOrder(user, orderId, { method, simulateFailure }) {
@@ -158,13 +179,21 @@ async function payOrder(user, orderId, { method, simulateFailure }) {
     throw new AppError(402, 'PAYMENT_FAILED', 'Payment was declined (simulated). Order remains PENDING.');
   }
  
-  return transition(order, STATUS.PAID, {
+  const result = await transition(order, STATUS.PAID, {
     extraData: { paidAt: new Date() },
     onCommitTx: (tx) =>
       tx.payment.create({
         data: { orderId: order.id, amount: order.totalAmount, method, status: 'SUCCESS', transactionRef },
       }),
   });
+  emitDomainEvent(EVENTS.ORDER_PAID, {
+    orderId: result.id,
+    userId: user.id,
+    email: user.email,
+    totalAmount: result.totalAmount,
+    transactionRef,
+  });
+  return result;
 }
  
 async function cancelOwnOrder(user, orderId) {

@@ -1,4 +1,5 @@
 // Express application (ไม่ listen ที่นี่ — แยกจาก server.js เพื่อให้บทที่ 11 ทดสอบด้วย Supertest ได้)
+const path = require('node:path');
 const express = require('express');
 const helmet = require('helmet');
 const cors = require('cors');
@@ -36,6 +37,9 @@ function createApp() {
       uptimeSeconds: Math.round(process.uptime()),
     });
   });
+ 
+  // หน้าเว็บทดสอบ WebSocket (WS1): http://localhost:8080/realtime.html
+  app.use(express.static(path.join(__dirname, '..', 'public')));
  
   // Versioning: ใส่ /api/v1 ไว้หน้า URL เพื่อให้ออก v2 ได้ในอนาคตโดยไม่กระทบ Client เดิม
   app.use('/api/v1', globalLimiter, apiRoutes);

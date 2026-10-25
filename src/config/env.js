@@ -36,6 +36,9 @@ module.exports = Object.freeze({
   cacheTtl: {
     product: toInt(process.env.CACHE_TTL_PRODUCT, 60),
     productList: toInt(process.env.CACHE_TTL_PRODUCT_LIST, 30),
+    rabbitmqUrl: process.env.RABBITMQ_URL || '',
+    orderQueue: process.env.ORDER_QUEUE || 'order_events',
+    lowStockThreshold: toInt(process.env.LOW_STOCK_THRESHOLD, 5),
   },
   rateLimit: {
     // ปิดใน test เป็นค่าเริ่มต้น (มี test เฉพาะที่เปิดด้วย RATE_LIMIT_ENABLED=true)

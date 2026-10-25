@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Order Live Feed</title>
+    <link rel="stylesheet" href="/realtime.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Order Live Feed <small>(WebSocket — WS1)</small></h1>
+      <p>
+        วาง JWT ที่ได้จาก <code>POST /api/v1/auth/login</code> แล้วกด Connect — เปิดหลายแท็บพร้อมกันเพื่อดูการอัปเดตแบบ
+        Real-time
+      </p>
+      <form id="connect-form">
+        <input id="token" placeholder="JWT token" autocomplete="off" required />
+        <button type="submit">Connect</button>
+      </form>
+      <p id="status" class="status off">disconnected</p>
+      <ul id="events"></ul>
+    </main>
+    <script src="/realtime.js"></script>
+  </body>
+</html>
