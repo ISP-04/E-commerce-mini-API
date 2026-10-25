@@ -14,9 +14,14 @@ const auth = {
 const isAdmin = (req) => req.user && req.user.role === 'ADMIN';
  
 const products = {
-  list: async (req, res) => res.json(await productService.list(req.valid.query, { includeInactive: isAdmin(req) })),
-  get: async (req, res) =>
-    res.json({ data: await productService.getById(req.valid.params.id, { includeInactive: isAdmin(req) }) }),
+  list: async (req, res) => {
+    const { value, cache } = await productService.list(req.valid.query, { includeInactive: isAdmin(req) });
+    res.set('X-Cache', cache).json(value);
+  },
+  get: async (req, res) => {
+    const { value, cache } = await productService.getById(req.valid.params.id, { includeInactive: isAdmin(req) });
+    res.set('X-Cache', cache).json({ data: value });
+  },
   create: async (req, res) => res.status(201).json({ data: await productService.create(req.valid.body) }),
   update: async (req, res) => res.json({ data: await productService.update(req.valid.params.id, req.valid.body) }),
   remove: async (req, res) => {
@@ -24,6 +29,7 @@ const products = {
     res.status(204).end();
   },
 };
+
  
 const cart = {
   get: async (req, res) => res.json({ data: await cartService.getCart(req.user.id) }),

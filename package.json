@@ -15,7 +15,8 @@
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
     "db:seed": "node prisma/seed.js",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate",
+    "race:demo": "node scripts/race-demo.js"
   },
   "repository": {
     "type": "git",
@@ -52,6 +53,7 @@
     "jsonwebtoken": "^9.0.3",
     "morgan": "^1.12.1",
     "pg": "^8.23.1",
+    "redis": "^6.3.0",
     "zod": "^4.6.7"
   }
 }
