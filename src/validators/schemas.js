@@ -1,15 +1,5 @@
-// Zod schemas สำหรับตรวจสอบ Input ทุก Endpoint (บทที่ 07 จะเพิ่มของ Order)
+// Zod schemas สำหรับตรวจสอบ Input ทุก Endpoint (บทถัดๆ ไปจะเพิ่มของ Product, Cart, Order)
 const { z } = require('zod');
- 
-const uuid = z.uuid({ message: 'must be a valid UUID' });
-const idParam = z.object({ id: uuid });
-const itemIdParam = z.object({ itemId: uuid });
- 
-// ราคา: ตัวเลขบวก ทศนิยมไม่เกิน 2 ตำแหน่ง รับได้ทั้ง number และ string ("199.50")
-const money = z
-  .union([z.number(), z.string()])
-  .transform((v) => String(v).trim())
-  .refine((v) => /^\d{1,8}(\.\d{1,2})?$/.test(v), { message: 'must be a positive amount with at most 2 decimals' });
  
 const auth = {
   register: z.object({
@@ -31,47 +21,4 @@ const auth = {
   }),
 };
  
-const product = {
-  listQuery: z
-    .object({
-      page: z.coerce.number().int().min(1).default(1),
-      limit: z.coerce.number().int().min(1).max(100).default(10),
-      q: z.string().trim().max(100).optional(),
-      category: z.string().trim().max(50).optional(),
-      minPrice: z.coerce.number().min(0).optional(),
-      maxPrice: z.coerce.number().min(0).optional(),
-      inStock: z
-        .enum(['true', 'false'])
-        .transform((v) => v === 'true')
-        .optional(),
-      sort: z.enum(['newest', 'price_asc', 'price_desc', 'name']).default('newest'),
-    })
-    .refine((q) => q.minPrice === undefined || q.maxPrice === undefined || q.minPrice <= q.maxPrice, {
-      message: 'minPrice must be less than or equal to maxPrice',
-      path: ['minPrice'],
-    }),
-  create: z.object({
-    name: z.string().trim().min(1).max(200),
-    description: z.string().trim().max(2000).optional(),
-    price: money,
-    stock: z.number().int().min(0).max(1_000_000),
-    category: z.string().trim().min(1).max(50),
-    imageUrl: z.url().max(500).optional(),
-  }),
-};
-product.update = product.create
-  .partial()
-  .extend({ isActive: z.boolean().optional() })
-  .refine((o) => Object.keys(o).length > 0, { message: 'at least one field is required' });
- 
-const cart = {
-  add: z.object({
-    productId: uuid,
-    quantity: z.number().int().min(1).max(99).default(1),
-  }),
-  update: z.object({
-    quantity: z.number().int().min(1).max(99),
-  }),
-};
- 
-module.exports = { idParam, itemIdParam, auth, product, cart };
+module.exports = { auth };

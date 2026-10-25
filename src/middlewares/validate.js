@@ -1,7 +1,7 @@
 // Validation middleware ด้วย Zod: ตรวจ body/query/params ก่อนถึง Controller
 // ข้อมูลที่ผ่านการตรวจแล้วเก็บไว้ที่ req.valid (Express 5 ทำให้ req.query เป็น read-only)
 const AppError = require('../utils/AppError');
-
+ 
 function validate(schemas) {
   return (req, _res, next) => {
     req.valid = req.valid || {};
@@ -20,5 +20,5 @@ function validate(schemas) {
     return next();
   };
 }
-
+ 
 module.exports = validate;

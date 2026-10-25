@@ -1,24 +1,26 @@
-// Rate limit: จำกัดจำนวน request ต่อ IP เพื่อกัน brute-force
+// WS10 "What if...?": ถ้ามีคนยิง Request รัวๆ 1,000 ครั้ง/วินาที -> Rate Limiting ดักไว้ที่ชั้น API
 const { rateLimit } = require('express-rate-limit');
-
-const handler = (req, res) => res.status(429).json({ message: 'Too many requests, please try again later.' });
-
-// ใช้ทั้งระบบ: 100 ครั้ง / 15 นาที ต่อ IP
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 100,
-  standardHeaders: 'draft-7',
+const env = require('../config/env');
+ 
+const errorBody = (message) => ({ error: { code: 'RATE_LIMITED', message } });
+ 
+const globalLimiter = rateLimit({
+  windowMs: env.rateLimit.windowMs,
+  limit: env.rateLimit.max,
+  standardHeaders: 'draft-8',
   legacyHeaders: false,
-  handler,
+  skip: () => !env.rateLimit.enabled,
+  message: errorBody('Too many requests, please try again later'),
 });
-
-// ใช้กับ login/register: เข้มกว่า (ป้องกัน brute force คือการเดารหัสผ่านซ้ำๆ)
+ 
+// เข้มกว่าสำหรับ login/register ป้องกัน Brute-force รหัสผ่าน
 const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  limit: 10,
-  standardHeaders: 'draft-7',
+  windowMs: env.rateLimit.windowMs,
+  limit: env.rateLimit.authMax,
+  standardHeaders: 'draft-8',
   legacyHeaders: false,
-  handler,
+  skip: () => !env.rateLimit.enabled,
+  message: errorBody('Too many authentication attempts, please try again later'),
 });
-
-module.exports = { apiLimiter, authLimiter };
+ 
+module.exports = { globalLimiter, authLimiter };

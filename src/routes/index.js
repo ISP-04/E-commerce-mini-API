@@ -2,12 +2,9 @@
 const { Router } = require('express');
 const c = require('../controllers');
 const validate = require('../middlewares/validate');
-const optionalAuth = require('../middlewares/optionalAuth');
-const { authenticate, authorize } = require('../middlewares/auth');
+const { authenticate } = require('../middlewares/auth');
 const { authLimiter } = require('../middlewares/rateLimit');
 const s = require('../validators/schemas');
- 
-const adminOnly = [authenticate, authorize('ADMIN')];
  
 const auth = Router();
 auth.post('/register', authLimiter, validate({ body: s.auth.register }), c.auth.register);

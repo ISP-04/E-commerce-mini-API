@@ -12,6 +12,12 @@ const auth = {
  
 const isAdmin = (req) => req.user && req.user.role === 'ADMIN';
  
+const auth = {
+  register: async (req, res) => res.status(201).json({ data: await authService.register(req.valid.body) }),
+  login: async (req, res) => res.json({ data: await authService.login(req.valid.body) }),
+  me: async (req, res) => res.json({ data: await authService.getProfile(req.user.id) }),
+};
+ 
 const products = {
   list: async (req, res) => res.json(await productService.list(req.valid.query, { includeInactive: isAdmin(req) })),
   get: async (req, res) =>
@@ -32,4 +38,4 @@ const cart = {
   remove: async (req, res) => res.json({ data: await cartService.removeItem(req.user.id, req.valid.params.itemId) }),
 };
  
-module.exports = { auth, products, cart };
+module.exports = { auth, products };
