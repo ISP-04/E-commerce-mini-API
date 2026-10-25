@@ -30,7 +30,7 @@ COPY --from=build --chown=node:node /app/node_modules/.prisma ./node_modules/.pr
 COPY --chown=node:node package.json ./
 COPY --chown=node:node src ./src
 COPY --chown=node:node proto ./proto
-COPY --chown=node:node public ./public
+#COPY --chown=node:node public ./public
  
 # ไม่รันด้วย root — ถ้าแอปถูกเจาะ ผู้โจมตีจะไม่ได้สิทธิ์ root ใน container
 USER node
