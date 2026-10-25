@@ -1,0 +1,46 @@
+// WS2: gRPC Inventory Service — สื่อสารภายในระหว่าง Service (Binary Protobuf เร็วและเล็กกว่า JSON)
+syntax = "proto3";
+ 
+package inventory.v1;
+ 
+service InventoryService {
+  // Unary RPC: ตรวจว่าสินค้ามีสต็อกพอหรือไม่ (API เรียกตอนเพิ่มสินค้าลงตะกร้า)
+  rpc CheckStock (CheckStockRequest) returns (CheckStockResponse);
+ 
+  // Client streaming RPC: เครื่องสแกนในคลังสินค้าส่งรายการรับเข้าทีละชิ้นแบบต่อเนื่อง
+  // (เทียบได้กับ Pi Pico ส่ง Telemetry ใน WS2)
+  rpc StreamRestock (stream RestockItem) returns (RestockSummary);
+}
+ 
+message StockItem {
+  string product_id = 1;
+  int32 quantity = 2;
+}
+ 
+message CheckStockRequest {
+  repeated StockItem items = 1;
+}
+ 
+message ItemAvailability {
+  string product_id = 1;
+  int32 requested = 2;
+  int32 available = 3;
+  bool sufficient = 4;
+}
+ 
+message CheckStockResponse {
+  bool all_available = 1;
+  repeated ItemAvailability items = 2;
+}
+ 
+message RestockItem {
+  string product_id = 1;
+  int32 quantity = 2;
+  string scanned_by = 3;
+}
+ 
+message RestockSummary {
+  int32 received_messages = 1;
+  int32 updated_products = 2;
+  int32 total_units = 3;
+}

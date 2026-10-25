@@ -17,7 +17,9 @@
     "db:seed": "node prisma/seed.js",
     "postinstall": "prisma generate",
     "race:demo": "node scripts/race-demo.js",
-    "worker": "node worker/worker.js"
+    "worker": "node worker/worker.js",
+    "grpc:server": "node src/grpc/inventory.server.js",
+    "grpc:demo": "node scripts/grpc-demo.js"
   },
   "repository": {
     "type": "git",
@@ -43,6 +45,8 @@
     "node": ">=20"
   },
   "dependencies": {
+    "@grpc/grpc-js": "^1.14.6",
+    "@grpc/proto-loader": "^0.8.1",
     "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
     "amqplib": "^2.2.0",

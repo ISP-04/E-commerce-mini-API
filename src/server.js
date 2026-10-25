@@ -6,6 +6,7 @@ const { attachWebSocket } = require('./realtime/websocket');
 const prisma = require('./lib/prisma');
 const cache = require('./lib/cache');
 const mq = require('./lib/messageQueue');
+const inventoryClient = require('./grpc/inventory.client');
  
 // HTTP และ WebSocket ใช้พอร์ตเดียวกัน (WebSocket เริ่มจาก HTTP Upgrade request)
 const server = http.createServer(createApp());
@@ -24,6 +25,7 @@ const shutdown = (signal) => {
   console.log(`[api] ${signal} received, shutting down...`);
   wss.close();
   server.close(async () => {
+    inventoryClient.close();
     await Promise.allSettled([mq.disconnect(), cache.disconnect(), prisma.$disconnect()]);
     process.exit(0);
   });

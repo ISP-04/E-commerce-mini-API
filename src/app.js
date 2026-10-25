@@ -39,7 +39,7 @@ function createApp() {
   });
  
   // หน้าเว็บทดสอบ WebSocket (WS1): http://localhost:8080/realtime.html
-  app.use(express.static(path.join(__dirname, '..', 'public')));
+  app.use(express.static(path.join(__dirname, 'public')));
  
   // Versioning: ใส่ /api/v1 ไว้หน้า URL เพื่อให้ออก v2 ได้ในอนาคตโดยไม่กระทบ Client เดิม
   app.use('/api/v1', globalLimiter, apiRoutes);

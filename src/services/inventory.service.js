@@ -1,4 +1,4 @@
-// ตรรกะตรวจสต็อกกลาง — บทที่ 10 จะย้ายไปเรียกผ่าน gRPC Inventory Service (WS2)
+// ตรรกะตรวจสต็อกกลาง — ใช้ร่วมกันทั้ง gRPC Inventory Server (WS2) และเป็น Fallback ของ API
 const prisma = require('../lib/prisma');
  
 /**
@@ -25,4 +25,27 @@ async function checkStock(items) {
   return { allAvailable: result.every((r) => r.sufficient), items: result };
 }
  
-module.exports = { checkStock };
+/**
+ * รับสินค้าเข้าคลัง (Restock) — gRPC Client Streaming ส่งมาทีละรายการ
+ * @param {{productId: string, quantity: number}[]} adjustments
+ */
+async function applyRestock(adjustments) {
+  const totals = new Map();
+  for (const a of adjustments) {
+    totals.set(a.productId, (totals.get(a.productId) || 0) + a.quantity);
+  }
+  let updatedProducts = 0;
+  let totalUnits = 0;
+  await prisma.$transaction(async (tx) => {
+    for (const [productId, quantity] of totals) {
+      const res = await tx.product.updateMany({ where: { id: productId }, data: { stock: { increment: quantity } } });
+      if (res.count === 1) {
+        updatedProducts += 1;
+        totalUnits += quantity;
+      }
+    }
+  });
+  return { updatedProducts, totalUnits, productIds: [...totals.keys()] };
+}
+ 
+module.exports = { checkStock, applyRestock };

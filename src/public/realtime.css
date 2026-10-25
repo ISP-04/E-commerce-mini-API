@@ -1,0 +1,190 @@
+/* สไตล์หน้าทดสอบ WebSocket (WS1) — ไม่ใช้ framework ภายนอก ให้เปิดได้แม้ไม่มีเน็ต */
+:root {
+  --bg: #f6f7f9;
+  --card: #ffffff;
+  --border: #d9dde3;
+  --text: #1c2024;
+  --muted: #6b7280;
+  --on: #0f7b40;
+  --on-bg: #e4f5eb;
+  --off: #8a3b3b;
+  --off-bg: #f3e7e7;
+  --alert: #a01b1b;
+  --alert-bg: #fdeaea;
+  --alert-border: #e9a3a3;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 24px 16px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', 'Noto Sans Thai', system-ui, sans-serif;
+  line-height: 1.6;
+}
+
+main {
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+h1 {
+  margin: 0 0 4px;
+  font-size: 1.5rem;
+}
+
+h1 small {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 400;
+}
+
+p {
+  margin: 0 0 16px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+code {
+  background: #e8ebef;
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-size: 0.85em;
+}
+
+/* ฟอร์มวาง Token: บรรทัดเดียวบนจอกว้าง ซ้อนกันบนมือถือ */
+#connect-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+#token {
+  flex: 1 1 320px;
+  min-width: 0;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  color: var(--text);
+  font-family: ui-monospace, 'Consolas', monospace;
+  font-size: 0.85rem;
+}
+
+#token:focus {
+  outline: 2px solid #3b82f6;
+  outline-offset: 1px;
+}
+
+button {
+  padding: 9px 20px;
+  border: 0;
+  border-radius: 6px;
+  background: #1f2937;
+  color: #fff;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #374151;
+}
+
+/* ตัวบอกสถานะ: เขียว = connected, แดง = disconnected (คลาสมาจาก setStatus() ใน realtime.js) */
+.status {
+  display: inline-block;
+  margin: 0 0 16px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.status.on {
+  background: var(--on-bg);
+  color: var(--on);
+}
+
+.status.off {
+  background: var(--off-bg);
+  color: var(--off);
+}
+
+#events {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#events li {
+  border: 1px solid var(--border);
+  border-left: 4px solid #9ca3af;
+  border-radius: 6px;
+  background: var(--card);
+  padding: 10px 14px;
+}
+
+#events strong {
+  font-size: 0.9rem;
+  font-family: ui-monospace, 'Consolas', monospace;
+}
+
+#events pre {
+  margin: 6px 0 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+  font-size: 0.8rem;
+  color: #374151;
+}
+
+/* stock.low = สินค้าใกล้หมด -> พื้นแดงให้ Admin เห็นชัด */
+#events li.alert {
+  background: var(--alert-bg);
+  border-color: var(--alert-border);
+  border-left-color: var(--alert);
+}
+
+#events li.alert strong {
+  color: var(--alert);
+}
+
+#events li.alert pre {
+  color: #7f1d1d;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #15181c;
+    --card: #1e2227;
+    --border: #343a42;
+    --text: #e5e7eb;
+    --muted: #9ca3af;
+    --on: #6ee7a8;
+    --on-bg: #14352a;
+    --off: #f0a2a2;
+    --off-bg: #3a2020;
+    --alert: #fca5a5;
+    --alert-bg: #3d1f1f;
+    --alert-border: #7f3535;
+  }
+
+  code {
+    background: #2a2f36;
+  }
+
+  #events pre {
+    color: #cbd5e1;
+  }
+
+  #events li.alert pre {
+    color: #fecaca;
+  }
+}
