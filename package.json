@@ -10,7 +10,12 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "prepare": "husky || true"
+    "prepare": "husky || true",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:seed": "node prisma/seed.js",
+    "postinstall": "prisma generate"
   },
   "repository": {
     "type": "git",
@@ -29,16 +34,20 @@
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.13.0",
     "husky": "^9.1.7",
-    "prettier": "^3.9.10"
+    "prettier": "^3.9.10",
+    "prisma": "^7.10.1"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
+    "@prisma/adapter-pg": "^7.10.1",
+    "@prisma/client": "^7.10.1",
     "cors": "^2.8.6",
     "dotenv": "^18.0.9",
     "express": "^5.3.0",
     "helmet": "^8.3.0",
-    "morgan": "^1.12.1"
+    "morgan": "^1.12.1",
+    "pg": "^8.23.1"
   }
 }

@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: shop
+      POSTGRES_PASSWORD: shop
+      POSTGRES_DB: shop
+    ports:
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - pgdata-dev:/var/lib/postgresql/data
+ 
+volumes:
+  pgdata-dev:

@@ -15,6 +15,13 @@ function mapKnownError(err) {
   if (err.type === 'entity.too.large') {
     return new AppError(413, 'PAYLOAD_TOO_LARGE', 'Request body is too large');
   }
+  // Prisma error codes: https://www.prisma.io/docs/orm/reference/error-reference
+  if (err.code === 'P2002') {
+    return new AppError(409, 'DUPLICATE', 'Resource already exists');
+  }
+  if (err.code === 'P2025') {
+    return new AppError(404, 'NOT_FOUND', 'Resource not found');
+  }
   return null;
 }
  
