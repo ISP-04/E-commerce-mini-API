@@ -74,4 +74,24 @@ const cart = {
   }),
 };
  
-module.exports = { idParam, itemIdParam, auth, product, cart };
+const order = {
+  create: z.object({
+    shippingAddress: z.string().trim().min(10, 'must be at least 10 characters').max(500),
+  }),
+  listQuery: z.object({
+    page: z.coerce.number().int().min(1).default(1),
+    limit: z.coerce.number().int().min(1).max(50).default(10),
+    status: z.enum(['PENDING', 'PAID', 'SHIPPED', 'CANCELLED']).optional(),
+  }),
+  pay: z.object({
+    method: z.enum(['CARD', 'PROMPTPAY', 'BANK_TRANSFER']),
+    // จำลองการปฏิเสธจากธนาคาร เพื่อทดสอบเส้นทางล้มเหลว
+    simulateFailure: z.boolean().default(false),
+  }),
+  updateStatus: z.object({
+    status: z.enum(['SHIPPED', 'CANCELLED']),
+  }),
+};
+ 
+module.exports = { idParam, itemIdParam, auth, product, cart, order };
+
