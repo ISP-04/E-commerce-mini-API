@@ -1,0 +1,18 @@
+{
+  "name": "e-commerce-mini-api",
+  "version": "1.0.0",
+  "description": "E-commerce Mini API — 01204425",
+  "main": "src/server.js",
+  "scripts": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ISP-04/E-commerce-mini-API.git"
+  },
+  "license": "MIT",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/ISP-04/E-commerce-mini-API/issues"
+  },
+  "homepage": "https://github.com/ISP-04/E-commerce-mini-API#readme",
+  "private": true
+}

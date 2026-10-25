@@ -1,0 +1,1 @@
+console.log('E-commerce Mini API: project setup OK');
