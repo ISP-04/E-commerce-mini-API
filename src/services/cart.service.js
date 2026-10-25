@@ -1,7 +1,7 @@
 // ตะกร้าสินค้า: 1 user มี 1 cart, 1 cart มีหลาย CartItem
 const prisma = require('../lib/prisma');
 const AppError = require('../utils/AppError');
-const inventory = require('./inventory.service');
+const inventoryClient = require('../grpc/inventory.client');
 const { calculateOrderTotals } = require('../utils/money');
 const { money } = require('./serializers');
  
@@ -37,7 +37,7 @@ async function getCart(userId) {
 }
  
 async function ensureStock(productId, quantity) {
-  const res = await inventory.checkStock([{ productId, quantity }]);
+  const res = await inventoryClient.checkStock([{ productId, quantity }]);
   const item = res.items[0];
   if (!item || !item.sufficient) {
     throw AppError.conflict('INSUFFICIENT_STOCK', 'Not enough stock for this product', {

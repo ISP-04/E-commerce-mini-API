@@ -1,4 +1,4 @@
-// อ่านค่า config จาก Environment Variables ที่เดียว (ห้าม hardcode ค่าลับในโค้ด)
+// WS4: อ่านค่า config จาก Environment Variables ที่เดียว (ห้าม hardcode ค่าลับในโค้ด)
 require('dotenv').config({ quiet: true });
  
 const nodeEnv = process.env.NODE_ENV || 'development';
@@ -37,6 +37,15 @@ module.exports = Object.freeze({
     product: toInt(process.env.CACHE_TTL_PRODUCT, 60),
     productList: toInt(process.env.CACHE_TTL_PRODUCT_LIST, 30),
   },
+  rabbitmqUrl: process.env.RABBITMQ_URL || '',
+  orderQueue: process.env.ORDER_QUEUE || 'order_events',
+  grpc: {
+    inventoryUrl: process.env.INVENTORY_GRPC_URL || '',
+    port: toInt(process.env.INVENTORY_GRPC_PORT, 50051),
+    internalToken: process.env.INTERNAL_GRPC_TOKEN || '',
+    timeoutMs: toInt(process.env.INVENTORY_GRPC_TIMEOUT_MS, 500),
+  },
+  lowStockThreshold: toInt(process.env.LOW_STOCK_THRESHOLD, 5),
   rateLimit: {
     // ปิดใน test เป็นค่าเริ่มต้น (มี test เฉพาะที่เปิดด้วย RATE_LIMIT_ENABLED=true)
     enabled: process.env.RATE_LIMIT_ENABLED ? process.env.RATE_LIMIT_ENABLED === 'true' : nodeEnv !== 'test',

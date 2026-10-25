@@ -16,7 +16,14 @@
     "db:deploy": "prisma migrate deploy",
     "db:seed": "node prisma/seed.js",
     "postinstall": "prisma generate",
-    "race:demo": "node scripts/race-demo.js"
+    "race:demo": "node scripts/race-demo.js",
+    "worker": "node worker/worker.js",
+    "grpc:server": "node src/grpc/inventory.server.js",
+    "grpc:demo": "node scripts/grpc-demo.js",
+    "test": "jest --runInBand",
+    "test:unit": "jest --selectProjects unit",
+    "test:integration": "jest --runInBand --selectProjects integration",
+    "test:coverage": "jest --runInBand --coverage"
   },
   "repository": {
     "type": "git",
@@ -35,15 +42,20 @@
     "eslint-config-prettier": "^10.1.8",
     "globals": "^17.13.0",
     "husky": "^9.1.7",
+    "jest": "^30.5.2",
     "prettier": "^3.9.10",
-    "prisma": "^7.10.1"
+    "prisma": "^7.10.1",
+    "supertest": "^7.3.1"
   },
   "engines": {
     "node": ">=20"
   },
   "dependencies": {
+    "@grpc/grpc-js": "^1.14.6",
+    "@grpc/proto-loader": "^0.8.1",
     "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
+    "amqplib": "^2.2.0",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
     "dotenv": "^18.0.9",
@@ -54,6 +66,50 @@
     "morgan": "^1.12.1",
     "pg": "^8.23.1",
     "redis": "^6.3.0",
+    "swagger-ui-express": "^5.0.1",
+    "ws": "^8.22.0",
+    "yaml": "^2.9.1",
     "zod": "^4.6.7"
+  },
+  "jest": {
+    "projects": [
+      {
+        "displayName": "unit",
+        "testEnvironment": "node",
+        "setupFiles": [
+          "<rootDir>/tests/helpers/env.js"
+        ],
+        "testMatch": [
+          "<rootDir>/tests/unit/**/*.test.js"
+        ]
+      },
+      {
+        "displayName": "integration",
+        "testEnvironment": "node",
+        "setupFiles": [
+          "<rootDir>/tests/helpers/env.js"
+        ],
+        "testMatch": [
+          "<rootDir>/tests/integration/**/*.test.js"
+        ]
+      }
+    ],
+    "collectCoverageFrom": [
+      "src/**/*.js",
+      "worker/**/*.js",
+      "!src/server.js",
+      "!src/docs/**"
+    ],
+    "coverageReporters": [
+      "text-summary",
+      "html",
+      "lcov"
+    ],
+    "coverageThreshold": {
+      "global": {
+        "lines": 80,
+        "branches": 65
+      }
+    }
   }
 }

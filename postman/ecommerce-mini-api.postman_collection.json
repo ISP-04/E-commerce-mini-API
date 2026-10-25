@@ -1,0 +1,699 @@
+{
+  "info": {
+    "name": "E-commerce Mini API",
+    "description": "ชุดทดสอบทั้งเส้นทาง: สมัคร/เข้าสู่ระบบ → ดูสินค้า → ใส่ตะกร้า → สั่งซื้อ → ชำระเงิน\n\nTokenและ id ถูกเก็บลงตัวแปรของ Collection อัตโนมัติ จึงรันต่อกันได้ทั้งชุดโดยไม่ต้องคัดลอกค่าเอง\n\nก่อนรัน: เปิด API (npm start) และ npm run db:seed เพราะใช้บัญชี admin จาก .env (ADMIN_EMAIL/ADMIN_PASSWORD)\n\nรันบน Command line:\n  npx newman run postman/ecommerce-mini-api.postman_collection.json\n\nเปลี่ยนรหัส Admin ได้ด้วย:\n  npx newman run ... --env-var adminPassword=<รหัสจริง>",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080/api/v1" },
+    { "key": "customerEmail", "value": "newman-customer@shop.local" },
+    { "key": "customerPassword", "value": "customer1234" },
+    { "key": "adminEmail", "value": "admin@shop.local" },
+    { "key": "adminPassword", "value": "admin1234" },
+    { "key": "customerToken", "value": "" },
+    { "key": "adminToken", "value": "" },
+    { "key": "productId", "value": "" },
+    { "key": "productPrice", "value": "" },
+    { "key": "cartItemId", "value": "" },
+    { "key": "orderId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register customer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// รันซ้ำได้: ครั้งแรกได้ 201 ครั้งต่อไปอีเมลซ้ำจึงได้ 409",
+                  "pm.test('status 201 (สมัครใหม่) หรือ 409 (สมัครแล้ว)', () =>",
+                  "  pm.expect(pm.response.code).to.be.oneOf([201, 409]));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/register", "host": ["{{baseUrl}}"], "path": ["auth", "register"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{customerEmail}}\",\n  \"password\": \"{{customerPassword}}\",\n  \"name\": \"Newman Customer\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login customer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('ได้ token แบบ Bearer', () => {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.expect(data.tokenType).to.eql('Bearer');",
+                  "  pm.expect(data.token).to.be.a('string').and.not.empty;",
+                  "});",
+                  "// เก็บ Token ไว้ให้ Request ถัดไปใช้ต่อ",
+                  "pm.collectionVariables.set('customerToken', pm.response.json().data.token);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{customerEmail}}\",\n  \"password\": \"{{customerPassword}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200 (ต้องรัน npm run db:seed ก่อน)', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('adminToken', pm.response.json().data.token);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Login - wrong password",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// ตั้งใจตรวจรหัสที่ไม่ใช่ 2xx: รหัสผิดต้องได้ 401 ไม่ใช่ 200",
+                  "pm.test('status 401 INVALID_CREDENTIALS', () => {",
+                  "  pm.response.to.have.status(401);",
+                  "  pm.expect(pm.response.json().error.code).to.eql('INVALID_CREDENTIALS');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{customerEmail}}\",\n  \"password\": \"definitely-wrong\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Get me",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200, role = CUSTOMER และไม่ส่ง passwordHash กลับมา', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const user = pm.response.json().data;",
+                  "  pm.expect(user.role).to.eql('CUSTOMER');",
+                  "  pm.expect(user).to.not.have.property('passwordHash');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }],
+            "url": { "raw": "{{baseUrl}}/auth/me", "host": ["{{baseUrl}}"], "path": ["auth", "me"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Products",
+      "item": [
+        {
+          "name": "List products",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200 และมีข้อมูลการแบ่งหน้า', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.data).to.be.an('array');",
+                  "  pm.expect(body.pagination).to.have.all.keys('page', 'limit', 'total', 'totalPages');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/products?page=1&limit=5&sort=price_asc",
+              "host": ["{{baseUrl}}"],
+              "path": ["products"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "5" },
+                { "key": "sort", "value": "price_asc" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Search and filter products",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200 และทุกชิ้นอยู่ในหมวดที่กรอง', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const items = pm.response.json().data;",
+                  "  items.forEach((p) => pm.expect(p.category.toLowerCase()).to.eql('peripherals'));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/products?category=peripherals&inStock=true",
+              "host": ["{{baseUrl}}"],
+              "path": ["products"],
+              "query": [
+                { "key": "category", "value": "peripherals" },
+                { "key": "inStock", "value": "true" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create product (admin)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// ชื่อไม่ซ้ำทุกครั้งที่รัน เพื่อให้รันชุดนี้ซ้ำได้",
+                  "pm.collectionVariables.set('newProductName', `Newman Product ${Date.now()}`);"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 201 และสินค้าเปิดขายอยู่', () => {",
+                  "  pm.response.to.have.status(201);",
+                  "  const p = pm.response.json().data;",
+                  "  pm.expect(p.isActive).to.be.true;",
+                  "  pm.expect(p.stock).to.eql(5);",
+                  "});",
+                  "const product = pm.response.json().data;",
+                  "pm.collectionVariables.set('productId', product.id);",
+                  "pm.collectionVariables.set('productPrice', product.price);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/products", "host": ["{{baseUrl}}"], "path": ["products"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{newProductName}}\",\n  \"description\": \"สินค้าที่สร้างจากชุดทดสอบ Newman\",\n  \"price\": \"249.00\",\n  \"stock\": 5,\n  \"category\": \"microcontrollers\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Create product as customer (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// ตั้งใจตรวจรหัสที่ไม่ใช่ 2xx: ลูกค้าต้องสร้างสินค้าไม่ได้",
+                  "pm.test('status 403 FORBIDDEN', () => {",
+                  "  pm.response.to.have.status(403);",
+                  "  pm.expect(pm.response.json().error.code).to.eql('FORBIDDEN');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/products", "host": ["{{baseUrl}}"], "path": ["products"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Should not exist\",\n  \"price\": \"1.00\",\n  \"stock\": 1,\n  \"category\": \"hack\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Update product price (admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200 และราคาเปลี่ยนเป็น 199.00', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data.price).to.eql('199.00');",
+                  "});",
+                  "pm.collectionVariables.set('productPrice', pm.response.json().data.price);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/products/{{productId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["products", "{{productId}}"]
+            },
+            "body": { "mode": "raw", "raw": "{\n  \"price\": \"199.00\"\n}" }
+          }
+        },
+        {
+          "name": "Get product by id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200, id ตรงกับที่สร้าง และมี Header X-Cache', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data.id).to.eql(pm.collectionVariables.get('productId'));",
+                  "  pm.expect(pm.response.headers.get('X-Cache')).to.be.oneOf(['HIT', 'MISS', 'BYPASS']);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/products/{{productId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["products", "{{productId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cart",
+      "item": [
+        {
+          "name": "Get cart",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200 และมีโครงสร้างตะกร้าครบ', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data).to.include.keys('items', 'itemCount', 'total');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }],
+            "url": { "raw": "{{baseUrl}}/cart", "host": ["{{baseUrl}}"], "path": ["cart"] }
+          }
+        },
+        {
+          "name": "Add to cart",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 201 และมีสินค้าที่เพิ่มอยู่ในตะกร้า', () => {",
+                  "  pm.response.to.have.status(201);",
+                  "  const item = pm.response.json().data.items.find((i) => i.productId === pm.collectionVariables.get('productId'));",
+                  "  pm.expect(item, 'ต้องเจอสินค้าที่เพิ่ง add').to.not.be.undefined;",
+                  "  pm.collectionVariables.set('cartItemId', item.id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/cart", "host": ["{{baseUrl}}"], "path": ["cart"] },
+            "body": { "mode": "raw", "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"quantity\": 1\n}" }
+          }
+        },
+        {
+          "name": "Update cart item quantity",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('quantity = 2 และ subtotal ตรงกับราคาปัจจุบัน', () => {",
+                  "  const item = pm.response.json().data.items.find((i) => i.id === pm.collectionVariables.get('cartItemId'));",
+                  "  pm.expect(item.quantity).to.eql(2);",
+                  "  const expected = (Number(pm.collectionVariables.get('productPrice')) * 2).toFixed(2);",
+                  "  pm.expect(item.subtotal).to.eql(expected);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/cart/{{cartItemId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["cart", "{{cartItemId}}"]
+            },
+            "body": { "mode": "raw", "raw": "{\n  \"quantity\": 2\n}" }
+          }
+        },
+        {
+          "name": "Add to cart - not enough stock (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// ตั้งใจตรวจรหัสที่ไม่ใช่ 2xx: สินค้ามีสต็อก 5 แต่ในตะกร้ามี 2 แล้วและขอเพิ่มอีก 10 (รวม 12)",
+                  "pm.test('status 409 INSUFFICIENT_STOCK และบอกจำนวนที่ขอกับที่มี', () => {",
+                  "  pm.response.to.have.status(409);",
+                  "  const err = pm.response.json().error;",
+                  "  pm.expect(err.code).to.eql('INSUFFICIENT_STOCK');",
+                  "  pm.expect(err.details.requested).to.eql(12);",
+                  "  pm.expect(err.details.available).to.eql(5);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/cart", "host": ["{{baseUrl}}"], "path": ["cart"] },
+            "body": { "mode": "raw", "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"quantity\": 10\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Orders & Payment",
+      "item": [
+        {
+          "name": "Create order from cart",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 201, สถานะ PENDING และยอดรวมตรงกับตะกร้า', () => {",
+                  "  pm.response.to.have.status(201);",
+                  "  const order = pm.response.json().data;",
+                  "  pm.expect(order.status).to.eql('PENDING');",
+                  "  const expected = (Number(pm.collectionVariables.get('productPrice')) * 2).toFixed(2);",
+                  "  pm.expect(order.totalAmount).to.eql(expected);",
+                  "});",
+                  "pm.collectionVariables.set('orderId', pm.response.json().data.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/orders", "host": ["{{baseUrl}}"], "path": ["orders"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"shippingAddress\": \"99 Moo 1, Chiang Khruea, Mueang Sakon Nakhon 47000\"\n}"
+            }
+          }
+        },
+        {
+          "name": "List my orders",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200 และเจอคำสั่งซื้อที่เพิ่งสร้าง', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const ids = pm.response.json().data.map((o) => o.id);",
+                  "  pm.expect(ids).to.include(pm.collectionVariables.get('orderId'));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/orders?status=PENDING&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders"],
+              "query": [
+                { "key": "status", "value": "PENDING" },
+                { "key": "limit", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get order by id",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('items เก็บ Snapshot ชื่อและราคาสินค้า', () => {",
+                  "  const item = pm.response.json().data.items[0];",
+                  "  pm.expect(item).to.include.keys('productName', 'unitPrice', 'subtotal');",
+                  "  pm.expect(item.unitPrice).to.eql(pm.collectionVariables.get('productPrice'));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}"]
+            }
+          }
+        },
+        {
+          "name": "Pay - simulated decline",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// ตั้งใจตรวจรหัสที่ไม่ใช่ 2xx: จำลองธนาคารปฏิเสธ -> 402 และ Order ยังต้อง PENDING",
+                  "pm.test('status 402 PAYMENT_FAILED', () => {",
+                  "  pm.response.to.have.status(402);",
+                  "  pm.expect(pm.response.json().error.code).to.eql('PAYMENT_FAILED');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/pay",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}", "pay"]
+            },
+            "body": { "mode": "raw", "raw": "{\n  \"method\": \"CARD\",\n  \"simulateFailure\": true\n}" }
+          }
+        },
+        {
+          "name": "Pay - success",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200, สถานะ PAID และเก็บประวัติการจ่ายทั้งใบที่ล้มเหลวและสำเร็จ', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  const order = pm.response.json().data;",
+                  "  pm.expect(order.status).to.eql('PAID');",
+                  "  const statuses = order.payments.map((p) => p.status);",
+                  "  pm.expect(statuses).to.include('FAILED');",
+                  "  pm.expect(statuses).to.include('SUCCESS');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/pay",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}", "pay"]
+            },
+            "body": { "mode": "raw", "raw": "{\n  \"method\": \"PROMPTPAY\"\n}" }
+          }
+        },
+        {
+          "name": "Pay again (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// ตั้งใจตรวจรหัสที่ไม่ใช่ 2xx: จ่ายซ้ำต้องไม่สำเร็จ",
+                  "pm.test('status 409 INVALID_ORDER_STATE', () => {",
+                  "  pm.response.to.have.status(409);",
+                  "  pm.expect(pm.response.json().error.code).to.eql('INVALID_ORDER_STATE');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/pay",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}", "pay"]
+            },
+            "body": { "mode": "raw", "raw": "{\n  \"method\": \"CARD\"\n}" }
+          }
+        },
+        {
+          "name": "Admin set status SHIPPED",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200 และเปลี่ยนเป็น SHIPPED ได้ (PAID -> SHIPPED)', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().data.status).to.eql('SHIPPED');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/orders/{{orderId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["orders", "{{orderId}}", "status"]
+            },
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"SHIPPED\"\n}" }
+          }
+        }
+      ]
+    }
+  ]
+}

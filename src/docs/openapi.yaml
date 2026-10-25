@@ -1,0 +1,737 @@
+openapi: 3.0.3
+info:
+  title: E-commerce Mini API
+  version: 1.0.0
+  description: |
+    API สำหรับร้านค้าออนไลน์ขนาดเล็ก — ดูสินค้า → ใส่ตะกร้า → สั่งซื้อ → ชำระเงิน (จำลอง)
+
+    **Authentication:** ส่ง Header `Authorization: Bearer <token>` ที่ได้จาก `POST /api/v1/auth/login`
+
+    **Real-time:** เชื่อมต่อ WebSocket ที่ `ws://<host>/ws?token=<JWT>` เพื่อรับ event
+    `order.created`, `order.status_changed` และ `stock.low` (เฉพาะ Admin)
+
+    **รูปแบบ Error:** `{ "error": { "code": "...", "message": "...", "details": [...] } }`
+servers:
+  - url: /api/v1
+tags:
+  - name: Auth
+  - name: Products
+  - name: Cart
+  - name: Orders
+
+paths:
+  /auth/register:
+    post:
+      tags: [Auth]
+      summary: สมัครสมาชิก (ได้ role CUSTOMER เสมอ)
+      description: role กำหนดจากฝั่งเซิร์ฟเวอร์เท่านั้น ส่ง `role` มาใน Body จะถูกเพิกเฉย
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, name]
+              properties:
+                email: { type: string, format: email, maxLength: 254, example: alice@shop.local }
+                password:
+                  type: string
+                  minLength: 8
+                  description: ยาวไม่เกิน 72 ไบต์ (UTF-8) เพราะ bcrypt ใช้แค่ 72 ไบต์แรก
+                  example: password123
+                name: { type: string, minLength: 1, maxLength: 100, example: Alice }
+      responses:
+        '201':
+          description: สมัครสำเร็จ
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/User' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '409':
+          description: อีเมลถูกใช้แล้ว (code = EMAIL_TAKEN)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /auth/login:
+    post:
+      tags: [Auth]
+      summary: เข้าสู่ระบบ รับ JWT
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email, example: admin@shop.local }
+                password: { type: string, example: admin1234 }
+      responses:
+        '200':
+          description: เข้าสู่ระบบสำเร็จ
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      token: { type: string, description: JWT อายุตาม JWT_EXPIRES_IN (ค่าเริ่มต้น 1 ชั่วโมง) }
+                      tokenType: { type: string, example: Bearer }
+                      user: { $ref: '#/components/schemas/User' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401':
+          description: อีเมลหรือรหัสผ่านไม่ถูกต้อง (ข้อความเดียวกันทั้งสองกรณี)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '429': { $ref: '#/components/responses/RateLimited' }
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: ดูโปรไฟล์ของตัวเอง
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /products:
+    get:
+      tags: [Products]
+      summary: รายการสินค้า (ค้นหา กรอง แบ่งหน้า)
+      description: |
+        เรียกได้โดยไม่ต้องล็อกอิน ถ้าส่ง Token ของ Admin มาจะเห็นสินค้าที่ปิดขาย (`isActive = false`) ด้วย
+
+        Header `X-Cache` บอกที่มาของข้อมูล: `HIT` (จาก Redis), `MISS` (จากฐานข้อมูลแล้วเก็บลง cache),
+        `BYPASS` (ไม่ใช้ cache — ไม่มี Redis หรือเป็น Admin)
+      security: [{ bearerAuth: [] }, {}]
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 10 }
+        - name: q
+          in: query
+          description: ค้นหาในชื่อและคำอธิบาย (ไม่สนตัวพิมพ์ใหญ่เล็ก)
+          schema: { type: string, maxLength: 100 }
+        - name: category
+          in: query
+          schema: { type: string, maxLength: 50, example: peripherals }
+        - name: minPrice
+          in: query
+          schema: { type: number, minimum: 0 }
+        - name: maxPrice
+          in: query
+          schema: { type: number, minimum: 0 }
+        - name: inStock
+          in: query
+          description: 'true = เหลือสต็อก, false = สต็อกหมด'
+          schema: { type: string, enum: ['true', 'false'] }
+        - name: sort
+          in: query
+          schema: { type: string, enum: [newest, price_asc, price_desc, name], default: newest }
+      responses:
+        '200':
+          description: OK
+          headers:
+            X-Cache:
+              description: สถานะ cache ของคำตอบนี้
+              schema: { type: string, enum: [HIT, MISS, BYPASS] }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Product' }
+                  pagination: { $ref: '#/components/schemas/Pagination' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Products]
+      summary: เพิ่มสินค้า (Admin)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ProductInput' }
+      responses:
+        '201':
+          description: สร้างสำเร็จ
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Product' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+
+  /products/{id}:
+    parameters:
+      - { $ref: '#/components/parameters/Id' }
+    get:
+      tags: [Products]
+      summary: ดูสินค้าชิ้นเดียว
+      description: สินค้าที่ปิดขายตอบ 404 สำหรับลูกค้า แต่ Admin ดูได้
+      security: [{ bearerAuth: [] }, {}]
+      responses:
+        '200':
+          description: OK
+          headers:
+            X-Cache:
+              schema: { type: string, enum: [HIT, MISS, BYPASS] }
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Product' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Products]
+      summary: แก้ไขสินค้า (Admin) — ส่งมาเฉพาะฟิลด์ที่ต้องการแก้
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/ProductInput'
+                - type: object
+                  properties:
+                    isActive: { type: boolean }
+              description: ต้องมีอย่างน้อย 1 ฟิลด์
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Product' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Products]
+      summary: ปิดขายสินค้า (Admin, Soft delete)
+      description: ไม่ลบแถวจริงเพราะคำสั่งซื้อเก่ายังอ้างอิงสินค้านี้ — เปลี่ยน `isActive` เป็น false
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204': { description: ปิดขายแล้ว (ไม่มี Body) }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /cart:
+    get:
+      tags: [Cart]
+      summary: ดูตะกร้าของตัวเอง
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Cart' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Cart]
+      summary: เพิ่มสินค้าลงตะกร้า (ถ้ามีอยู่แล้วจะบวกจำนวนเพิ่ม) — ตรวจสต็อกผ่าน gRPC Inventory
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [productId]
+              properties:
+                productId: { type: string, format: uuid }
+                quantity: { type: integer, minimum: 1, maximum: 99, default: 1 }
+      responses:
+        '201':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Cart' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+
+  /cart/{itemId}:
+    parameters:
+      - name: itemId
+        in: path
+        required: true
+        description: id ของรายการในตะกร้า (ไม่ใช่ productId)
+        schema: { type: string, format: uuid }
+    patch:
+      tags: [Cart]
+      summary: แก้จำนวนของรายการในตะกร้า (ตั้งค่าใหม่ ไม่ใช่บวกเพิ่ม)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [quantity]
+              properties:
+                quantity: { type: integer, minimum: 1, maximum: 99 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Cart' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    delete:
+      tags: [Cart]
+      summary: เอาสินค้าออกจากตะกร้า
+      description: รายการของผู้ใช้อื่นตอบ 404 เหมือนรายการที่ไม่มีอยู่ (ป้องกัน IDOR enumeration)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: ตะกร้าหลังเอาสินค้าออก
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Cart' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /orders:
+    post:
+      tags: [Orders]
+      summary: สร้างคำสั่งซื้อจากตะกร้า (ตัดสต็อกใน Transaction)
+      description: |
+        ล็อกแถวสินค้าด้วย `SELECT ... FOR UPDATE` เรียงตาม id เพื่อกัน Race Condition และ Deadlock
+        ราคาที่บันทึกใน `items` เป็น Snapshot ณ ตอนสั่ง — ขึ้นราคาภายหลังไม่กระทบคำสั่งซื้อเดิม
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [shippingAddress]
+              properties:
+                shippingAddress:
+                  type: string
+                  minLength: 10
+                  maxLength: 500
+                  example: 99 Moo 1, Chiang Khruea, Mueang Sakon Nakhon 47000
+      responses:
+        '201':
+          description: สร้างคำสั่งซื้อสำเร็จ
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Order' }
+        '400':
+          description: ตะกร้าว่าง หรือข้อมูลไม่ผ่านการตรวจ
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409':
+          description: สต็อกไม่พอหรือสินค้าถูกปิดขาย (code = INSUFFICIENT_STOCK) — `details` บอกรายการที่มีปัญหา
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+              example:
+                error:
+                  code: INSUFFICIENT_STOCK
+                  message: Some items are out of stock or unavailable
+                  details:
+                    - productId: 3fa85f64-5717-4562-b3fc-2c963f66afa6
+                      reason: INSUFFICIENT_STOCK
+                      requested: 5
+                      available: 2
+    get:
+      tags: [Orders]
+      summary: รายการคำสั่งซื้อ (ลูกค้าเห็นของตัวเอง Admin เห็นทุกคน)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - name: limit
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 50, default: 10 }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/OrderStatus' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/Order' }
+                  pagination: { $ref: '#/components/schemas/Pagination' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /orders/{id}:
+    parameters:
+      - { $ref: '#/components/parameters/Id' }
+    get:
+      tags: [Orders]
+      summary: ดูคำสั่งซื้อชิ้นเดียว
+      description: คำสั่งซื้อของผู้ใช้อื่นตอบ 404 (ไม่ใช่ 403) เพื่อไม่ให้รู้ว่ามีอยู่จริง
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Order' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /orders/{id}/pay:
+    parameters:
+      - { $ref: '#/components/parameters/Id' }
+    post:
+      tags: [Orders]
+      summary: ชำระเงิน (จำลอง) — PENDING → PAID
+      description: 'ส่ง `simulateFailure: true` เพื่อจำลองการถูกธนาคารปฏิเสธ (ตอบ 402 และ Order ยัง PENDING)'
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [method]
+              properties:
+                method: { type: string, enum: [CARD, PROMPTPAY, BANK_TRANSFER] }
+                simulateFailure: { type: boolean, default: false }
+      responses:
+        '200':
+          description: ชำระเงินสำเร็จ
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Order' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '402':
+          description: การชำระเงินถูกปฏิเสธ (code = PAYMENT_FAILED) — บันทึก Payment สถานะ FAILED ไว้
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: สถานะไม่อนุญาตให้ชำระเงิน เช่น จ่ายไปแล้ว (code = INVALID_ORDER_STATE)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /orders/{id}/cancel:
+    parameters:
+      - { $ref: '#/components/parameters/Id' }
+    post:
+      tags: [Orders]
+      summary: ยกเลิกคำสั่งซื้อของตัวเอง (ได้เฉพาะตอน PENDING) และคืนสต็อก
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: ยกเลิกแล้ว
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Order' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: ยกเลิกเองไม่ได้ในสถานะนี้ (จ่ายแล้วต้องให้ Admin ทำ)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /orders/{id}/status:
+    parameters:
+      - { $ref: '#/components/parameters/Id' }
+    patch:
+      tags: [Orders]
+      summary: เปลี่ยนสถานะคำสั่งซื้อ (Admin)
+      description: |
+        เปลี่ยนได้เฉพาะตามกฎ State Machine: `PENDING → CANCELLED`, `PAID → SHIPPED`, `PAID → CANCELLED`
+        (`PENDING → PAID` ต้องผ่าน `/orders/{id}/pay` เท่านั้น เพื่อให้มีหลักฐานการชำระเงินเสมอ)
+        ยกเลิกจากสถานะที่จองสต็อกไว้ (PENDING/PAID) จะคืนสต็อกให้อัตโนมัติ
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [SHIPPED, CANCELLED] }
+      responses:
+        '200':
+          description: เปลี่ยนสถานะแล้ว
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Order' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409':
+          description: เปลี่ยนสถานะนี้ไม่ได้ (code = INVALID_TRANSITION)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: ใส่ Token ที่ได้จาก `POST /auth/login` (ไม่ต้องพิมพ์คำว่า Bearer)
+
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+
+  schemas:
+    Money:
+      type: string
+      description: จำนวนเงินเป็นสตริงทศนิยม 2 ตำแหน่ง (ไม่ใช้ float เพื่อไม่ให้เสียความแม่นยำ)
+      example: '249.00'
+
+    OrderStatus:
+      type: string
+      enum: [PENDING, PAID, SHIPPED, CANCELLED]
+
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        name: { type: string }
+        role: { type: string, enum: [CUSTOMER, ADMIN] }
+        createdAt: { type: string, format: date-time }
+
+    ProductInput:
+      type: object
+      required: [name, price, stock, category]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 200, example: Raspberry Pi Pico W }
+        description: { type: string, maxLength: 2000 }
+        price: { $ref: '#/components/schemas/Money' }
+        stock: { type: integer, minimum: 0, maximum: 1000000, example: 10 }
+        category: { type: string, minLength: 1, maxLength: 50, example: microcontrollers }
+        imageUrl: { type: string, format: uri, maxLength: 500 }
+
+    Product:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        description: { type: string, nullable: true }
+        price: { $ref: '#/components/schemas/Money' }
+        stock: { type: integer }
+        category: { type: string }
+        imageUrl: { type: string, nullable: true }
+        isActive: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    CartItem:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: ใช้กับ PATCH และ DELETE /cart/{itemId}
+        productId: { type: string, format: uuid }
+        name: { type: string }
+        unitPrice: { $ref: '#/components/schemas/Money' }
+        quantity: { type: integer }
+        stock: { type: integer, description: สต็อกคงเหลือของสินค้านี้ ณ ตอนเรียก }
+        available: { type: boolean, description: false เมื่อสต็อกไม่พอหรือสินค้าถูกปิดขาย }
+        subtotal: { $ref: '#/components/schemas/Money' }
+
+    Cart:
+      type: object
+      properties:
+        id: { type: string, format: uuid, nullable: true }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/CartItem' }
+        itemCount: { type: integer, description: จำนวนชิ้นรวมทุกรายการ }
+        total: { $ref: '#/components/schemas/Money' }
+
+    OrderItem:
+      type: object
+      description: Snapshot ของสินค้า ณ เวลาที่สั่งซื้อ (ชื่อและราคาไม่เปลี่ยนตามสินค้าต้นทาง)
+      properties:
+        id: { type: string, format: uuid }
+        productId: { type: string, format: uuid }
+        productName: { type: string }
+        unitPrice: { $ref: '#/components/schemas/Money' }
+        quantity: { type: integer }
+        subtotal: { $ref: '#/components/schemas/Money' }
+
+    Payment:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        amount: { $ref: '#/components/schemas/Money' }
+        method: { type: string, enum: [CARD, PROMPTPAY, BANK_TRANSFER] }
+        status: { type: string, enum: [SUCCESS, FAILED] }
+        transactionRef: { type: string, example: PAY-8b1f2c4a-0000-4000-8000-000000000000 }
+        createdAt: { type: string, format: date-time }
+
+    Order:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        userId: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/OrderStatus' }
+        totalAmount: { $ref: '#/components/schemas/Money' }
+        shippingAddress: { type: string }
+        paidAt: { type: string, format: date-time, nullable: true }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/OrderItem' }
+        payments:
+          type: array
+          description: รวมความพยายามที่ล้มเหลวด้วย (status = FAILED)
+          items: { $ref: '#/components/schemas/Payment' }
+
+    Pagination:
+      type: object
+      properties:
+        page: { type: integer, example: 1 }
+        limit: { type: integer, example: 10 }
+        total: { type: integer, example: 42 }
+        totalPages: { type: integer, example: 5 }
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string, example: VALIDATION_ERROR }
+            message: { type: string, example: Request validation failed }
+            details:
+              description: รายละเอียดเพิ่มเติม เช่น field ที่ผิด หรือรายการสินค้าที่สต็อกไม่พอ
+              oneOf:
+                - type: array
+                  items: { type: object }
+                - type: object
+
+  responses:
+    BadRequest:
+      description: ข้อมูลที่ส่งมาไม่ถูกต้อง (code = VALIDATION_ERROR, INVALID_JSON, BAD_REQUEST)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example:
+            error:
+              code: VALIDATION_ERROR
+              message: Request validation failed
+              details:
+                - field: body.quantity
+                  message: 'Too small: expected number to be >=1'
+    Unauthorized:
+      description: ไม่ได้ส่ง Token, Token ผิด หรือหมดอายุ (code = UNAUTHORIZED)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Forbidden:
+      description: ล็อกอินแล้วแต่สิทธิ์ไม่ถึง (code = FORBIDDEN)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: ไม่พบข้อมูล — รวมถึงข้อมูลของผู้ใช้อื่น (code = NOT_FOUND)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: ขัดแย้งกับสถานะปัจจุบัน เช่น สต็อกไม่พอ (code = INSUFFICIENT_STOCK)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    RateLimited:
+      description: เรียกถี่เกินกำหนด (code = RATE_LIMITED)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }

@@ -1,0 +1,15 @@
+# WS8 กิจกรรมที่ 2: Background Worker แยกเป็นอีก Image (ไม่ต้องมี Prisma/Express)
+FROM node:22-alpine AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
+ 
+FROM node:22-alpine AS runtime
+ENV NODE_ENV=production
+WORKDIR /app
+COPY --from=deps --chown=node:node /app/node_modules ./node_modules
+COPY --chown=node:node package.json ./
+COPY --chown=node:node worker ./worker
+COPY --chown=node:node src/lib/mqTopology.js ./src/lib/mqTopology.js
+USER node
+CMD ["node", "worker/worker.js"]

@@ -3,7 +3,7 @@ const globals = require('globals');
 const prettier = require('eslint-config-prettier');
 
 module.exports = [
-  { ignores: ['node_modules/', 'coverage/', 'public/'] },
+  { ignores: ['node_modules/', 'coverage/'] },
   js.configs.recommended,
   {
     files: ['**/*.js'],
@@ -17,6 +17,6 @@ module.exports = [
     },
   },
   { files: ['tests/**/*.js'], languageOptions: { globals: { ...globals.jest } } },
-  { files: ['public/**/*.js'], languageOptions: { sourceType: 'script', globals: { ...globals.browser } } },
+  { files: ['src/public/**/*.js'], languageOptions: { sourceType: 'script', globals: { ...globals.browser } } },
   prettier,
 ];
