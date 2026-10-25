@@ -1,4 +1,4 @@
-// ชั้น Route: กำหนด URL + Middleware chain (Rate limit -> Auth -> Role -> Validate -> Controller)
+// Routes: กำหนด URL + Middleware chain (Rate limit -> Auth -> Role -> Validate -> Controller)
 const { Router } = require('express');
 const c = require('../controllers');
 const validate = require('../middlewares/validate');
@@ -22,15 +22,30 @@ products.put('/:id', ...adminOnly, validate({ params: s.idParam, body: s.product
 products.delete('/:id', ...adminOnly, validate({ params: s.idParam }), c.products.remove);
  
 const cart = Router();
-cart.use(authenticate); // ทุก Endpoint ของตะกร้าต้องล็อกอิน
+cart.use(authenticate);
 cart.get('/', c.cart.get);
 cart.post('/', validate({ body: s.cart.add }), c.cart.add);
 cart.patch('/:itemId', validate({ params: s.itemIdParam, body: s.cart.update }), c.cart.update);
 cart.delete('/:itemId', validate({ params: s.itemIdParam }), c.cart.remove);
  
+const orders = Router();
+orders.use(authenticate);
+orders.post('/', validate({ body: s.order.create }), c.orders.create);
+orders.get('/', validate({ query: s.order.listQuery }), c.orders.list);
+orders.get('/:id', validate({ params: s.idParam }), c.orders.get);
+orders.post('/:id/pay', validate({ params: s.idParam, body: s.order.pay }), c.orders.pay);
+orders.post('/:id/cancel', validate({ params: s.idParam }), c.orders.cancel);
+orders.patch(
+  '/:id/status',
+  authorize('ADMIN'),
+  validate({ params: s.idParam, body: s.order.updateStatus }),
+  c.orders.updateStatus,
+);
+ 
 const api = Router();
 api.use('/auth', auth);
 api.use('/products', products);
 api.use('/cart', cart);
+api.use('/orders', orders);
  
 module.exports = api;

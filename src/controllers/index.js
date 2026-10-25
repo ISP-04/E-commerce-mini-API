@@ -3,6 +3,7 @@
 const authService = require('../services/auth.service');
 const productService = require('../services/product.service');
 const cartService = require('../services/cart.service');
+const orderService = require('../services/order.service');
  
 const auth = {
   register: async (req, res) => res.status(201).json({ data: await authService.register(req.valid.body) }),
@@ -32,4 +33,15 @@ const cart = {
   remove: async (req, res) => res.json({ data: await cartService.removeItem(req.user.id, req.valid.params.itemId) }),
 };
  
-module.exports = { auth, products, cart };
+const orders = {
+  create: async (req, res) => res.status(201).json({ data: await orderService.createOrder(req.user, req.valid.body) }),
+  list: async (req, res) => res.json(await orderService.listOrders(req.user, req.valid.query)),
+  get: async (req, res) => res.json({ data: await orderService.getOrder(req.user, req.valid.params.id) }),
+  pay: async (req, res) =>
+    res.json({ data: await orderService.payOrder(req.user, req.valid.params.id, req.valid.body) }),
+  cancel: async (req, res) => res.json({ data: await orderService.cancelOwnOrder(req.user, req.valid.params.id) }),
+  updateStatus: async (req, res) =>
+    res.json({ data: await orderService.updateStatus(req.valid.params.id, req.valid.body) }),
+};
+ 
+module.exports = { auth, products, cart, orders };
