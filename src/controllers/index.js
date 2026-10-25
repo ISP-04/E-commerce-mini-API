@@ -2,6 +2,7 @@
 // Express 5 ส่ง Error จาก async function ไปที่ errorHandler ให้อัตโนมัติ ไม่ต้องเขียน try/catch
 const authService = require('../services/auth.service');
 const productService = require('../services/product.service');
+const cartService = require('../services/cart.service');
  
 const auth = {
   register: async (req, res) => res.status(201).json({ data: await authService.register(req.valid.body) }),
@@ -23,4 +24,12 @@ const products = {
   },
 };
  
-module.exports = { auth, products };
+const cart = {
+  get: async (req, res) => res.json({ data: await cartService.getCart(req.user.id) }),
+  add: async (req, res) => res.status(201).json({ data: await cartService.addItem(req.user.id, req.valid.body) }),
+  update: async (req, res) =>
+    res.json({ data: await cartService.updateItem(req.user.id, req.valid.params.itemId, req.valid.body) }),
+  remove: async (req, res) => res.json({ data: await cartService.removeItem(req.user.id, req.valid.params.itemId) }),
+};
+ 
+module.exports = { auth, products, cart };
