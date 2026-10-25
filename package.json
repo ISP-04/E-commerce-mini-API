@@ -3,7 +3,14 @@
   "version": "1.0.0",
   "description": "E-commerce Mini API — 01204425",
   "main": "src/server.js",
-  "scripts": {},
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/ISP-04/E-commerce-mini-API.git"
@@ -14,5 +21,13 @@
     "url": "https://github.com/ISP-04/E-commerce-mini-API/issues"
   },
   "homepage": "https://github.com/ISP-04/E-commerce-mini-API#readme",
-  "private": true
+  "private": true,
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.13.0",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.13.0",
+    "husky": "^9.1.7",
+    "prettier": "^3.9.10"
+  }
 }
