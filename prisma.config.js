@@ -1,6 +1,6 @@
 // Prisma 7 config (CommonJS) — URL ของฐานข้อมูลอ่านจาก .env / environment
 require('dotenv').config({ quiet: true });
- 
+
 module.exports = {
   schema: 'prisma/schema.prisma',
   migrations: {
