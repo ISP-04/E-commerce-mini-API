@@ -9,9 +9,18 @@ const auth = {
   me: async (req, res) => res.json({ data: await authService.getProfile(req.user.id) }),
 };
  
+const isAdmin = (req) => req.user && req.user.role === 'ADMIN';
+ 
 const products = {
-  list: async (req, res) => res.json(await productService.list()),
-  get: async (req, res) => res.json({ data: await productService.getById(req.params.id) }),
+  list: async (req, res) => res.json(await productService.list(req.valid.query, { includeInactive: isAdmin(req) })),
+  get: async (req, res) =>
+    res.json({ data: await productService.getById(req.valid.params.id, { includeInactive: isAdmin(req) }) }),
+  create: async (req, res) => res.status(201).json({ data: await productService.create(req.valid.body) }),
+  update: async (req, res) => res.json({ data: await productService.update(req.valid.params.id, req.valid.body) }),
+  remove: async (req, res) => {
+    await productService.remove(req.valid.params.id);
+    res.status(204).end();
+  },
 };
  
 module.exports = { auth, products };

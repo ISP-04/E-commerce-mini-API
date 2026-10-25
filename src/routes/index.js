@@ -2,9 +2,12 @@
 const { Router } = require('express');
 const c = require('../controllers');
 const validate = require('../middlewares/validate');
-const { authenticate } = require('../middlewares/auth');
+const optionalAuth = require('../middlewares/optionalAuth');
+const { authenticate, authorize } = require('../middlewares/auth');
 const { authLimiter } = require('../middlewares/rateLimit');
 const s = require('../validators/schemas');
+ 
+const adminOnly = [authenticate, authorize('ADMIN')];
  
 const auth = Router();
 auth.post('/register', authLimiter, validate({ body: s.auth.register }), c.auth.register);
@@ -12,8 +15,11 @@ auth.post('/login', authLimiter, validate({ body: s.auth.login }), c.auth.login)
 auth.get('/me', authenticate, c.auth.me);
  
 const products = Router();
-products.get('/', c.products.list);
-products.get('/:id', c.products.get);
+products.get('/', optionalAuth, validate({ query: s.product.listQuery }), c.products.list);
+products.get('/:id', optionalAuth, validate({ params: s.idParam }), c.products.get);
+products.post('/', ...adminOnly, validate({ body: s.product.create }), c.products.create);
+products.put('/:id', ...adminOnly, validate({ params: s.idParam, body: s.product.update }), c.products.update);
+products.delete('/:id', ...adminOnly, validate({ params: s.idParam }), c.products.remove);
  
 const api = Router();
 api.use('/auth', auth);
