@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "prepare": "husky || true"
   },
   "repository": {
     "type": "git",
@@ -29,5 +30,8 @@
     "globals": "^17.13.0",
     "husky": "^9.1.7",
     "prettier": "^3.9.10"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }
