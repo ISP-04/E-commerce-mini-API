@@ -1,6 +1,6 @@
-// Zod schemas สำหรับตรวจสอบ Input ทุก Endpoint
+// Zod schemas สำหรับตรวจสอบ Input ทุก Endpoint (บทถัดๆ ไปจะเพิ่มของ Product, Cart, Order)
 const { z } = require('zod');
-
+ 
 const auth = {
   register: z.object({
     email: z
@@ -20,5 +20,5 @@ const auth = {
     password: z.string().min(1).max(200),
   }),
 };
-
+ 
 module.exports = { auth };
