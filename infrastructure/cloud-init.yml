@@ -1,0 +1,17 @@
+#cloud-config
+# WS12 กิจกรรมที่ 2 (อัตโนมัติ): เตรียมเซิร์ฟเวอร์ให้พร้อมรัน Docker Compose
+package_update: true
+packages:
+  - ca-certificates
+  - curl
+runcmd:
+  # เครื่อง 1GB RAM: เพิ่ม swap 2GB กัน Postgres + RabbitMQ + API ใช้แรมเกินจนโดน OOM kill
+  - fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile
+  - echo '/swapfile none swap sw 0 0' >> /etc/fstab
+  # ติดตั้ง Docker Engine + Compose plugin จากสคริปต์ทางการของ Docker
+  - curl -fsSL https://get.docker.com | sh
+  - systemctl enable --now docker
+  # EC2 (Ubuntu AMI) ใช้ผู้ใช้ ubuntu ไม่ใช่ root: ให้สั่ง docker ได้โดยไม่ต้อง sudo
+  - usermod -aG docker ubuntu
+  - mkdir -p /home/ubuntu/app && chown ubuntu:ubuntu /home/ubuntu/app
+

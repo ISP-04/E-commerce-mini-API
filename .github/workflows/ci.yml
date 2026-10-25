@@ -7,7 +7,7 @@ on:
   workflow_call: # ให้ cd.yml เรียกใช้ซ้ำก่อน Deploy
  
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-github.workflow-{{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
  
 jobs:
@@ -94,3 +94,4 @@ jobs:
           context: .
           file: ./Dockerfile.worker
           push: false
+
