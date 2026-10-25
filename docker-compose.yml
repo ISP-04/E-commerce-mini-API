@@ -1,0 +1,126 @@
+# WS5/WS7/WS8: "The Grand Symphony" — รวมทุกชิ้นส่วนของระบบ
+#   docker compose up --build
+#
+# Network: ทุก service อยู่ใน network เดียวกัน เรียกกันด้วย "ชื่อ service" (postgres, redis, rabbitmq)
+#          ไม่ใช่ localhost — localhost ภายใน container หมายถึงตัว container เอง
+# Security (WS10): Postgres/Redis/gRPC ไม่ map port ออกนอกเครื่อง -> ยิงตรงเข้า 5432 จากภายนอกไม่ได้
+#          ถ้าต้องต่อ DBeaver ตอนพัฒนา ใช้ docker-compose.dev.yml (เปิดเฉพาะ 127.0.0.1)
+ 
+x-app-env: &app-env
+  NODE_ENV: production
+  DATABASE_URL: postgresql://${POSTGRES_USER:-shop}:${POSTGRES_PASSWORD:-shop}@postgres:5432/${POSTGRES_DB:-shop}
+  REDIS_URL: redis://redis:6379
+  RABBITMQ_URL: amqp://${RABBITMQ_USER:-shop}:${RABBITMQ_PASSWORD:-shop}@rabbitmq:5672
+  JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required (set it in .env)}
+  INTERNAL_GRPC_TOKEN: ${INTERNAL_GRPC_TOKEN:-change-me-internal-token}
+  ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@shop.local}
+  ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+ 
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-shop}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-shop}
+      POSTGRES_DB: ${POSTGRES_DB:-shop}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+ 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ['redis-server', '--appendonly', 'yes']
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+ 
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-shop}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-shop}
+    ports:
+      - '127.0.0.1:15672:15672' # Management UI เปิดเฉพาะเครื่องตัวเอง
+    volumes:
+      - rabbitdata:/var/lib/rabbitmq
+    healthcheck:
+      test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+ 
+  # รัน Migration ครั้งเดียวแล้วจบ (ใช้ build stage ที่มี prisma CLI)
+  migrate:
+    build:
+      context: .
+      target: build
+    image: ${DOCKERHUB_USERNAME:-local}/ecommerce-migrate:latest
+    environment: *app-env
+    command: ['npx', 'prisma', 'migrate', 'deploy']
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: 'no'
+ 
+  inventory:
+    build: .
+    image: ${DOCKERHUB_USERNAME:-local}/ecommerce-api:latest
+    restart: unless-stopped
+    command: ['node', 'src/grpc/inventory.server.js']
+    environment: *app-env
+    healthcheck:
+      disable: true # image นี้มี HEALTHCHECK ของ HTTP API ซึ่งไม่ใช้กับ gRPC
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+ 
+  api:
+    build: .
+    image: ${DOCKERHUB_USERNAME:-local}/ecommerce-api:latest
+    restart: unless-stopped
+    ports:
+      - '8080:8080'
+    environment:
+      <<: *app-env
+      PORT: 8080
+      INVENTORY_GRPC_URL: inventory:50051
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      inventory:
+        condition: service_started
+ 
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    image: ${DOCKERHUB_USERNAME:-local}/ecommerce-worker:latest
+    restart: unless-stopped
+    environment:
+      RABBITMQ_URL: amqp://${RABBITMQ_USER:-shop}:${RABBITMQ_PASSWORD:-shop}@rabbitmq:5672
+      EMAIL_DELAY_MS: 3000
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+    deploy:
+      replicas: 2 # WS7 Scalability: Worker 2 ตัวแบ่งงานกันแบบ Round-robin
+ 
+volumes:
+  pgdata:
+  redisdata:
+  rabbitdata:
