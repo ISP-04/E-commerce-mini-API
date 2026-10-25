@@ -1,3 +1,6 @@
+# สำหรับพัฒนาบนเครื่องตัวเองเท่านั้น: รันฐานข้อมูลใน Docker แล้วรัน API ด้วย `npm run dev`
+#   docker compose -f docker-compose.dev.yml up -d
+# พอร์ตผูกกับ 127.0.0.1 เท่านั้น (เครื่องอื่นในวง LAN เข้าไม่ได้)
 services:
   postgres:
     image: postgres:15-alpine
@@ -9,6 +12,11 @@ services:
       - '127.0.0.1:5432:5432'
     volumes:
       - pgdata-dev:/var/lib/postgresql/data
-
+ 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '127.0.0.1:6379:6379'
+ 
 volumes:
   pgdata-dev:

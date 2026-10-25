@@ -10,7 +10,8 @@ const AppError = require('../utils/AppError');
 const { calculateOrderTotals } = require('../utils/money');
 const { STATUS, canAdminTransition, canCustomerCancel, canPay, holdsStock } = require('../utils/orderStatus');
 const serialize = require('./serializers');
- 
+const productService = require('./product.service');
+
 const TX_OPTIONS = { maxWait: 5000, timeout: 10000 };
 const ORDER_INCLUDE = { items: true, payments: { orderBy: { createdAt: 'asc' } } };
  
@@ -82,8 +83,11 @@ async function createOrder(user, { shippingAddress }) {
     return created;
   }, TX_OPTIONS);
  
+  // หลัง Commit แล้วเท่านั้น จึงล้าง Cache ของสินค้าที่สต็อกเปลี่ยน
+  await productService.invalidate(...order.items.map((i) => i.productId));
   return serialize.order(order);
 }
+
 
 async function findOrderFor(user, orderId) {
   const where = user.role === 'ADMIN' ? { id: orderId } : { id: orderId, userId: user.id };
@@ -135,7 +139,8 @@ async function transition(order, to, { restock = false, extraData = {}, onCommit
     if (onCommitTx) await onCommitTx(tx);
     return tx.order.findUnique({ where: { id: order.id }, include: ORDER_INCLUDE });
   }, TX_OPTIONS);
- 
+    
+  if (restock) await productService.invalidate(...order.items.map((i) => i.productId));
   return serialize.order(updated);
 }
  
