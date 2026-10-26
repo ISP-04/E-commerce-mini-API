@@ -1,7 +1,6 @@
-# WS12: ใช้บน AWS EC2 — ดึง Image สำเร็จรูปจาก Docker Hub (ไม่ build บนเซิร์ฟเวอร์)
-# วางไฟล์นี้ที่ /home/ubuntu/app/docker-compose.yml บนเซิร์ฟเวอร์ คู่กับไฟล์ /home/ubuntu/app/.env (คัดลอกจาก .env.example แล้วแก้ค่า)
-# GitHub Actions (cd.yml) จะ SSH เข้ามารัน: docker compose pull && docker compose up -d --remove-orphans
- 
+# WS12 / บทที่ 16: ใช้บน Production (AWS EC2) — ดึง Image สำเร็จรูปจาก Docker Hub
+# ดำเนินการผ่าน CI/CD Pipeline (cd.yml)
+
 x-app-env: &app-env
   NODE_ENV: production
   DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
@@ -12,7 +11,7 @@ x-app-env: &app-env
   ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@shop.local}
   ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
   CORS_ORIGIN: ${CORS_ORIGIN:-*}
- 
+
 services:
   postgres:
     image: postgres:15-alpine
@@ -27,7 +26,7 @@ services:
       test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
       interval: 5s
       retries: 10
- 
+
   redis:
     image: redis:7-alpine
     restart: unless-stopped
@@ -38,7 +37,7 @@ services:
       test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
       retries: 10
- 
+
   rabbitmq:
     image: rabbitmq:3-management-alpine
     restart: unless-stopped
@@ -51,7 +50,7 @@ services:
       test: ['CMD', 'rabbitmq-diagnostics', '-q', 'ping']
       interval: 10s
       retries: 10
- 
+
   migrate:
     image: ${DOCKERHUB_USERNAME:?DOCKERHUB_USERNAME is required}/ecommerce-migrate:${IMAGE_TAG:-latest}
     environment: *app-env
@@ -60,7 +59,7 @@ services:
       postgres:
         condition: service_healthy
     restart: 'no'
- 
+
   inventory:
     image: ${DOCKERHUB_USERNAME}/ecommerce-api:${IMAGE_TAG:-latest}
     restart: unless-stopped
@@ -71,16 +70,18 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
- 
+
+  # บทที่ 16: ไม่เปิดพอร์ตสู่ภายนอกแล้ว ผู้ใช้เข้าผ่าน Nginx (service web) เท่านั้น
   api:
     image: ${DOCKERHUB_USERNAME}/ecommerce-api:${IMAGE_TAG:-latest}
     restart: unless-stopped
-    ports:
-      - '80:8080' # เปิดพอร์ตเดียวสู่ภายนอก (ควรวาง Reverse proxy + HTTPS ด้านหน้าเมื่อมีโดเมน)
     environment:
       <<: *app-env
       PORT: 8080
       INVENTORY_GRPC_URL: inventory:50051
+      # มี Reverse proxy (Nginx) อยู่หน้า API 1 ชั้น -> ใช้ IP จาก X-Forwarded-For ที่ Nginx ใส่ให้
+      # ปลอดภัยเพราะ API ไม่ได้เปิดพอร์ตสู่ภายนอก ทุก Request ต้องผ่าน Nginx ซึ่งเขียนทับ Header นี้เสมอ
+      TRUST_PROXY_HOPS: 1
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -88,7 +89,7 @@ services:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
- 
+
   worker:
     image: ${DOCKERHUB_USERNAME}/ecommerce-worker:${IMAGE_TAG:-latest}
     restart: unless-stopped
@@ -99,9 +100,18 @@ services:
         condition: service_healthy
     deploy:
       replicas: 2
- 
+
+  # บทที่ 16: Nginx เสิร์ฟหน้าเว็บ React และ Reverse proxy ไปที่ api — ประตูเดียวสู่ภายนอก (พอร์ต 80)
+  web:
+    image: ${DOCKERHUB_USERNAME}/ecommerce-web:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    ports:
+      - '80:80'
+    depends_on:
+      api:
+        condition: service_started
+
 volumes:
   pgdata:
   redisdata:
   rabbitdata:
-
