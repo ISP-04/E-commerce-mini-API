@@ -23,8 +23,11 @@
     "test": "jest --runInBand",
     "test:unit": "jest --selectProjects unit",
     "test:integration": "jest --runInBand --selectProjects integration",
-    "test:coverage": "jest --runInBand --coverage"
+   "test:coverage": "jest --runInBand --coverage",
+    "web:dev": "npm --prefix web run dev",
+    "web:build": "npm --prefix web run build"
   },
+
   "repository": {
     "type": "git",
     "url": "git+https://github.com/ISP-04/E-commerce-mini-API.git"

@@ -5,7 +5,7 @@
 #          ไม่ใช่ localhost — localhost ภายใน container หมายถึงตัว container เอง
 # Security (WS10): Postgres/Redis/gRPC ไม่ map port ออกนอกเครื่อง -> ยิงตรงเข้า 5432 จากภายนอกไม่ได้
 #          ถ้าต้องต่อ DBeaver ตอนพัฒนา ใช้ docker-compose.dev.yml (เปิดเฉพาะ 127.0.0.1)
- 
+
 x-app-env: &app-env
   NODE_ENV: production
   DATABASE_URL: postgresql://${POSTGRES_USER:-shop}:${POSTGRES_PASSWORD:-shop}@postgres:5432/${POSTGRES_DB:-shop}
@@ -15,7 +15,7 @@ x-app-env: &app-env
   INTERNAL_GRPC_TOKEN: ${INTERNAL_GRPC_TOKEN:-change-me-internal-token}
   ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@shop.local}
   ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
- 
+
 services:
   postgres:
     image: postgres:15-alpine
@@ -31,7 +31,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
- 
+
   redis:
     image: redis:7-alpine
     restart: unless-stopped
@@ -43,7 +43,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
- 
+
   rabbitmq:
     image: rabbitmq:3-management-alpine
     restart: unless-stopped
@@ -59,7 +59,7 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
- 
+
   # รัน Migration ครั้งเดียวแล้วจบ (ใช้ build stage ที่มี prisma CLI)
   migrate:
     build:
@@ -72,7 +72,7 @@ services:
       postgres:
         condition: service_healthy
     restart: 'no'
- 
+
   inventory:
     build: .
     image: ${DOCKERHUB_USERNAME:-local}/ecommerce-api:latest
@@ -84,7 +84,7 @@ services:
     depends_on:
       migrate:
         condition: service_completed_successfully
- 
+
   api:
     build: .
     image: ${DOCKERHUB_USERNAME:-local}/ecommerce-api:latest
@@ -104,7 +104,7 @@ services:
         condition: service_healthy
       inventory:
         condition: service_started
- 
+
   worker:
     build:
       context: .
@@ -119,7 +119,18 @@ services:
         condition: service_healthy
     deploy:
       replicas: 2 # WS7 Scalability: Worker 2 ตัวแบ่งงานกันแบบ Round-robin
- 
+
+  # --- เพิ่ม service web ตรงนี้ ---
+  web:
+    build: ./web
+    image: ${DOCKERHUB_USERNAME:-local}/ecommerce-web:latest
+    restart: unless-stopped
+    ports:
+      - '3000:80'
+    depends_on:
+      api:
+        condition: service_started
+
 volumes:
   pgdata:
   redisdata:
