@@ -1,8 +1,11 @@
 // แผนผังหน้าเว็บ (Routing): URL ไหนแสดง Component ไหน
-// บทที่ 14: หน้าสินค้าและเข้าสู่ระบบ — หน้าตะกร้าและคำสั่งซื้อจะเพิ่มในบทที่ 15
 import { Link, Route, Routes } from 'react-router';
 import { Layout } from './components/Layout';
+import { ProtectedRoute } from './components/ProtectedRoute';
 import { LoginPage, RegisterPage } from './pages/AuthPages';
+import { CartPage } from './pages/CartPage';
+import { OrderDetailPage } from './pages/OrderDetailPage';
+import { OrdersPage } from './pages/OrdersPage';
 import { ProductDetailPage } from './pages/ProductDetailPage';
 import { ProductsPage } from './pages/ProductsPage';
  
@@ -23,6 +26,12 @@ export default function App() {
         <Route path="products/:id" element={<ProductDetailPage />} />
         <Route path="login" element={<LoginPage />} />
         <Route path="register" element={<RegisterPage />} />
+        {/* หน้าที่ต้องเข้าสู่ระบบ */}
+        <Route element={<ProtectedRoute />}>
+          <Route path="cart" element={<CartPage />} />
+          <Route path="orders" element={<OrdersPage />} />
+          <Route path="orders/:id" element={<OrderDetailPage />} />
+        </Route>
         <Route path="*" element={<NotFoundPage />} />
       </Route>
     </Routes>
